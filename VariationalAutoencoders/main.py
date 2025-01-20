@@ -15,6 +15,10 @@ import datasets
 from torchsummary import summary
 import tqdm
 
+from model import VariationalAutoencoder
+
+import os
+
 
 def train(
     model,
@@ -29,10 +33,10 @@ def train(
     model.train()
     for i, batch in enumerate(dataloader):
         data = batch["data"].to(device)
-        target = batch["target"].to(device)
+        # target = batch["target"].to(device)
 
         prediction = model(data)
-        loss = loss_fn(prediction, target)
+        loss = loss_fn(prediction, data)
 
         loss.backward()
 
@@ -50,88 +54,64 @@ def eval(model, dataloader: DataLoader, loss_fn, device="cuda"):
     size = len(dataloader.dataset)
     num_batches = len(dataloader)
 
-    test_loss, correct = 0.0, 0.0
+    test_loss = 0.0, 0.0
 
     progress_bar = tqdm.tqdm(range(num_batches))
 
     with torch.no_grad():
         for batch in dataloader:
             data = batch["data"].to(device)
-            target = batch["target"].to(device)
+            # target = batch["target"].to(device)
 
             prediction = model(data)
-            loss = loss_fn(prediction, target)
+            loss = loss_fn(prediction, data)
             test_loss = loss.item()
-
-            correct += (
-                (
-                    np.argmax(F.softmax(prediction, -1).cpu(), -1)
-                    == np.argmax(target.cpu(), -1)
-                )
-                .type(torch.float)
-                .sum()
-                .item()
-            )
 
             progress_bar.update(1)
 
     test_loss  # /= num_batches
-    correct /= size
-    print(
-        f"Test Error: \n Accuracy: {(100 * correct):>0.1f}%, Avg loss: {test_loss:>8f} \n"
-    )
+    print(f"Test Error: \n Avg loss: {test_loss:>8f} \n")
 
 
 def collate_fn(batch):
     result = dict()
 
-    result["target"] = torch.tensor([x["target"] for x in batch], dtype=torch.float32)
+    # result["target"] = torch.tensor([x["target"] for x in batch], dtype=torch.float32)
     result["data"] = torch.tensor([[x["data"]] for x in batch], dtype=torch.float32)
 
     return result
 
 
+def preprocess(imgs):
+    imgs = np.array(imgs["image"]).astype("float32") / 255.0
+    imgs = np.pad(imgs, ((2, 2), (2, 2)), constant_values=0.0)
+
+    return {"data": imgs}
+
+
 if __name__ == "__main__":
     epoch = 10
 
-    encoder = nn.Sequential(
-        # 32x32
-        nn.Conv2d(3, 32, (3, 3), stride=2, padding="same"),
-        nn.ReLU(),
-        # 16x16
-        nn.Conv2d(32, 64, (3, 3), stride=2, padding="same"),
-        nn.ReLU(),
-        # 8x8
-        nn.Conv2d(64, 128, (3, 3), stride=2, padding="same"),
-        nn.ReLU(),
-        # 4x4
-        nn.Flatten(),
-        nn.Linear(4 * 4 * 128, 2),
-    )
+    model_path = "model.ph"
 
-    model = nn.Sequential(
-        encoder,
-    )
+    model = VariationalAutoencoder()
 
-    loss_fn = nn.CrossEntropyLoss()
+    if os.path.exists(model_path):
+        model.load_state_dict(torch.load(model_path, weights_only=True))
+
+    loss_fn = nn.BCELoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
     scheduler = LinearLR(optimizer, total_iters=epoch)
 
-    summary(model, (1, 28, 28), device="cpu")
+    summary(model, (1, 32, 32), device="cpu")
 
     # Prepare data
-    dataset_raw = datasets.load_dataset("MNIST")
+    dataset = datasets.load_dataset("fashion_mnist")
 
-    dataset_onehot = dataset_raw.map(
-        lambda x: {"target": [0 if v != x["label"] else 1 for v in range(10)]}
-    )
-
-    dataset_onehot = dataset_onehot.map(
-        lambda x: {"data": torch.from_numpy(np.array(x["image"]) / 255.0)}
-    )
-
-    dataset = dataset_onehot.remove_columns("image")
     dataset = dataset.remove_columns("label")
+    dataset = dataset.map(preprocess)
+
+    dataset = dataset.remove_columns("image")
 
     print(dataset)
 
@@ -166,3 +146,5 @@ if __name__ == "__main__":
 
         eval(model, test_dataloader, loss_fn)
         scheduler.step()
+
+    torch.save(model.state_dict(), model_path)
