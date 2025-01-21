@@ -97,6 +97,7 @@ def preprocess(imgs):
 
 if __name__ == "__main__":
     epoch = 100
+    stop_threshold = 10
 
     model_path = "vae_3.pt"
 
@@ -147,6 +148,8 @@ if __name__ == "__main__":
     model = model.to("cuda")
 
     current_best_loss = eval(model, test_dataloader, loss_fn)
+
+    no_improvement = 0
     for _ in range(epoch):
         train(model, train_dataloader, loss_fn, optimizer, progress)
 
@@ -156,4 +159,13 @@ if __name__ == "__main__":
         if loss < current_best_loss:
             tqdm.write(f"Saved new best model. {loss} vs {current_best_loss}")
             current_best_loss = loss
+            no_improvement = 0
             torch.save(model.state_dict(), model_path)
+        else:
+            no_improvement += 1
+            if no_improvement == stop_threshold:
+                tqdm.write(
+                    f"There were no improvements for {stop_threshold} iterations."
+                )
+                tqdm.write("Stopping Training")
+                exit()
