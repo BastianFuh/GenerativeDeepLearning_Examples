@@ -6,6 +6,7 @@ import numpy as np
 import os
 import random
 from matplotlib import pyplot as plt
+from matplotlib import cm, colors
 
 
 def preprocess(imgs):
@@ -18,7 +19,7 @@ def preprocess(imgs):
 def collate_fn(batch):
     result = dict()
 
-    # result["target"] = torch.tensor([x["target"] for x in batch], dtype=torch.float32)
+    result["label"] = torch.tensor([x["label"] for x in batch], dtype=torch.float32)
     result["data"] = torch.tensor([[x["data"]] for x in batch], dtype=torch.float32)
 
     return result
@@ -40,7 +41,7 @@ if __name__ == "__main__":
 
     dataset = datasets.load_dataset("fashion_mnist")
 
-    dataset = dataset.remove_columns("label")
+    # dataset = dataset.remove_columns("label")
     dataset = dataset.map(preprocess)
 
     dataset = dataset.remove_columns("image")
@@ -58,20 +59,52 @@ if __name__ == "__main__":
         persistent_workers=True,
     )
 
-    data = next(iter(test_dataloader))
+    # If false, show scatter plot
+    SHOW_IMAGES = False
 
-    data = data["data"].to(device)
+    if SHOW_IMAGES:
+        # Shows a grid of processed test images
+        data = next(iter(test_dataloader))
 
-    output = model(data)
+        data = data["data"].to(device)
 
-    f, ax = plt.subplots(4, 8)
+        output = model.encoder(data)
+        f, ax = plt.subplots(4, 8)
 
-    for i in range(0, 16):
-        row = 2 * int(i / 8)
-        column = int(i % 8)
-        ax[row, column].imshow(data.cpu()[i].squeeze(), cmap="gray")
-        ax[row + 1, column].imshow(
-            output.cpu().detach().numpy()[i].squeeze(), cmap="gray"
+        for i in range(0, 16):
+            row = 2 * int(i / 8)
+            column = int(i % 8)
+            ax[row, column].imshow(data.cpu()[i].squeeze(), cmap="gray")
+            ax[row + 1, column].imshow(
+                output.cpu().detach().numpy()[i].squeeze(), cmap="gray"
+            )
+
+        plt.show()
+    else:
+        # Shows a scatter plot of the embedding space
+
+        fig, ax = plt.subplots()
+
+        total_embeddings = None
+        labels = list()
+        for data in test_dataloader:
+            x = data["data"].to(device)
+            labels.append(data["label"])
+            embedding = model.encoder(x)
+            if total_embeddings is None:
+                total_embeddings = embedding
+            else:
+                total_embeddings = torch.cat((total_embeddings, embedding), 0)
+
+        total_embeddings = total_embeddings.cpu().detach()
+
+        sc = ax.scatter(
+            total_embeddings[:, 0],
+            total_embeddings[:, 1],
+            c=labels,
+            alpha=0.5,
+            s=3,
+            cmap="gist_rainbow",
         )
-
-    plt.show()
+        fig.colorbar(sc)
+        plt.show()
