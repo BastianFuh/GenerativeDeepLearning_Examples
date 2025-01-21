@@ -25,19 +25,22 @@ def collate_fn(batch):
     return result
 
 
+# If false, show scatter plot
+SHOW_IMAGES = False
+
+MODEL_PATH = "vae_3_rmse.pt"
+DEVICE = "cuda"
+
 if __name__ == "__main__":
     model = VariationalAutoencoder()
 
-    model_path = "vae_3.pt"
-    device = "cuda"
-
-    if not os.path.exists(model_path):
+    if not os.path.exists(MODEL_PATH):
         print("Pleasure ensure that a model exist")
         exit()
 
-    model.load_state_dict(torch.load(model_path, weights_only=True))
+    model.load_state_dict(torch.load(MODEL_PATH, weights_only=True))
     model.eval()
-    model = model.to(device)
+    model = model.to(DEVICE)
 
     dataset = datasets.load_dataset("fashion_mnist")
 
@@ -59,16 +62,13 @@ if __name__ == "__main__":
         persistent_workers=True,
     )
 
-    # If false, show scatter plot
-    SHOW_IMAGES = False
-
     if SHOW_IMAGES:
         # Shows a grid of processed test images
         data = next(iter(test_dataloader))
 
-        data = data["data"].to(device)
+        data = data["data"].to(DEVICE)
 
-        output = model.encoder(data)
+        output = model(data)
         f, ax = plt.subplots(4, 8)
 
         for i in range(0, 16):
@@ -88,7 +88,7 @@ if __name__ == "__main__":
         total_embeddings = None
         labels = list()
         for data in test_dataloader:
-            x = data["data"].to(device)
+            x = data["data"].to(DEVICE)
             labels.append(data["label"])
             embedding = model.encoder(x)
             if total_embeddings is None:

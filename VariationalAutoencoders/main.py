@@ -99,7 +99,7 @@ if __name__ == "__main__":
     epoch = 100
     stop_threshold = 10
 
-    model_path = "vae_3.pt"
+    model_path = "vae_3_rmse.pt"
 
     model = VariationalAutoencoder()
 
@@ -107,7 +107,11 @@ if __name__ == "__main__":
         print("Loaded model")
         model.load_state_dict(torch.load(model_path, weights_only=True))
 
-    loss_fn = nn.BCELoss()
+    mseloss = nn.MSELoss()
+
+    def loss_fn(x, y):
+        return torch.sqrt(mseloss(x, y))
+
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
     scheduler = LinearLR(optimizer, total_iters=epoch)
 
