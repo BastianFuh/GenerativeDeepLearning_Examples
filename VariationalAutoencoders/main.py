@@ -13,7 +13,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 import datasets
 from torchsummary import summary
-import tqdm
+from tqdm import tqdm
 
 from model import VariationalAutoencoder
 
@@ -25,18 +25,23 @@ def train(
     dataloader: DataLoader,
     loss_fn,
     optimizer,
-    progress_bar: tqdm.tqdm,
+    progress_bar: tqdm,
     device="cuda",
 ):
+    """Training function"""
+
     num_batches = len(dataloader)
     reporting_interval = num_batches / 5
+    test_loss = 0.0
+
     model.train()
     for i, batch in enumerate(dataloader):
         data = batch["data"].to(device)
-        # target = batch["target"].to(device)
 
         prediction = model(data)
         loss = loss_fn(prediction, data)
+
+        test_loss += loss.item()
 
         loss.backward()
 
@@ -44,39 +49,40 @@ def train(
         optimizer.zero_grad()
         progress_bar.update(1)
 
-        if i % reporting_interval == 0:
-            print(f"\nCurrent loss {loss.item()}")
+        if i % reporting_interval == 0 and i != 0:
+            print_loss = test_loss / reporting_interval
+            tqdm.write(f"{i}/{num_batches} Current avg training loss {print_loss}")
+            test_loss = 0.0
 
 
 def eval(model, dataloader: DataLoader, loss_fn, device="cuda"):
-    model.eval()
-
-    size = len(dataloader.dataset)
+    """Evaluation function."""
     num_batches = len(dataloader)
 
-    test_loss = 0.0, 0.0
+    test_loss = 0.0
 
-    progress_bar = tqdm.tqdm(range(num_batches))
+    progress_bar = tqdm(range(num_batches), position=1)
 
+    model.eval()
     with torch.no_grad():
         for batch in dataloader:
             data = batch["data"].to(device)
-            # target = batch["target"].to(device)
 
             prediction = model(data)
             loss = loss_fn(prediction, data)
-            test_loss = loss.item()
+            test_loss += loss.item()
 
             progress_bar.update(1)
 
-    test_loss  # /= num_batches
-    print(f"Test Error: \n Avg loss: {test_loss:>8f} \n")
+    test_loss /= num_batches
+    tqdm.write(f"Avg evaluation loss: {test_loss:>8f}")
+
+    return test_loss
 
 
 def collate_fn(batch):
     result = dict()
 
-    # result["target"] = torch.tensor([x["target"] for x in batch], dtype=torch.float32)
     result["data"] = torch.tensor([[x["data"]] for x in batch], dtype=torch.float32)
 
     return result
@@ -90,17 +96,18 @@ def preprocess(imgs):
 
 
 if __name__ == "__main__":
-    epoch = 10
+    epoch = 100
 
     model_path = "model.ph"
 
     model = VariationalAutoencoder()
 
     if os.path.exists(model_path):
+        print("Loaded model")
         model.load_state_dict(torch.load(model_path, weights_only=True))
 
     loss_fn = nn.BCELoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
     scheduler = LinearLR(optimizer, total_iters=epoch)
 
     summary(model, (1, 32, 32), device="cpu")
@@ -130,21 +137,23 @@ if __name__ == "__main__":
         collate_fn=collate_fn,
         num_workers=4,
         batch_size=16,
-        shuffle=True,
         pin_memory=True,
         prefetch_factor=4,
         persistent_workers=True,
     )
 
-    progress = tqdm.tqdm(range(len(train_dataloader) * epoch))
+    progress = tqdm(range(len(train_dataloader) * epoch), position=0)
 
     model = model.to("cuda")
 
-    eval(model, test_dataloader, loss_fn)
+    current_best_loss = eval(model, test_dataloader, loss_fn)
     for _ in range(epoch):
         train(model, train_dataloader, loss_fn, optimizer, progress)
 
-        eval(model, test_dataloader, loss_fn)
+        loss = eval(model, test_dataloader, loss_fn)
         scheduler.step()
 
-    torch.save(model.state_dict(), model_path)
+        if loss < current_best_loss:
+            tqdm.write(f"Saved new best model. {loss} vs {current_best_loss}")
+            current_best_loss = loss
+            torch.save(model.state_dict(), model_path)
