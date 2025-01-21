@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 import datasets
-from model import VariationalAutoencoder
+from model import VariationalAutoencoder, EMBEDDING_SIZE
 import numpy as np
 import os
 import random
@@ -28,7 +28,7 @@ def collate_fn(batch):
 if __name__ == "__main__":
     model = VariationalAutoencoder()
 
-    model_path = "model.ph"
+    model_path = "vae_3.pt"
     device = "cuda"
 
     if not os.path.exists(model_path):
@@ -83,8 +83,8 @@ if __name__ == "__main__":
     else:
         # Shows a scatter plot of the embedding space
 
-        fig, ax = plt.subplots()
-
+        fig = plt.figure()
+        ax = fig.add_subplot(projection="3d")
         total_embeddings = None
         labels = list()
         for data in test_dataloader:
@@ -101,6 +101,7 @@ if __name__ == "__main__":
         sc = ax.scatter(
             total_embeddings[:, 0],
             total_embeddings[:, 1],
+            total_embeddings[:, 2],
             c=labels,
             alpha=0.5,
             s=3,

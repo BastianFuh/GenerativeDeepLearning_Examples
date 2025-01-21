@@ -98,7 +98,7 @@ def preprocess(imgs):
 if __name__ == "__main__":
     epoch = 100
 
-    model_path = "model.ph"
+    model_path = "vae_3.pt"
 
     model = VariationalAutoencoder()
 

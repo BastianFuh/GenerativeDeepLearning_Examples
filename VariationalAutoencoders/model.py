@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import numpy as np
 
 PRE_EMBEDDING_SIZE = 4 * 4 * 128
-EMBEDDING_SIZE = 2
+EMBEDDING_SIZE = 3
 
 
 class VariationalAutoencoderEncoder(nn.Module):
