@@ -20,12 +20,30 @@ from model import VariationalAutoencoder
 import os
 
 
+def calc_loss(loss_fn, prediction, expectation, z_mean, z_log_var):
+    if z_mean is None or z_log_var is None:
+        loss = loss_fn(prediction)
+    else:
+        # 500 represent the beta loss of a beta-VAE
+        reconstruction_loss = 500 * loss_fn(prediction, expectation)
+        # kl = Lullback-Leibler
+        kl_loss = torch.mean(
+            -0.5
+            * torch.sum(
+                1 + z_log_var - torch.square(z_mean) - torch.exp(z_log_var), axis=1
+            )
+        )
+        loss = reconstruction_loss + kl_loss
+    return loss
+
+
 def train(
     model,
     dataloader: DataLoader,
     loss_fn,
     optimizer,
     progress_bar: tqdm,
+    is_variational=False,
     device="cuda",
 ):
     """Training function"""
@@ -38,8 +56,8 @@ def train(
     for i, batch in enumerate(dataloader):
         data = batch["data"].to(device)
 
-        prediction = model(data)
-        loss = loss_fn(prediction, data)
+        prediction, z_mean, z_log_var = model(data)
+        loss = calc_loss(loss_fn, prediction, data, z_mean, z_log_var)
 
         test_loss += loss.item()
 
@@ -55,7 +73,7 @@ def train(
             test_loss = 0.0
 
 
-def eval(model, dataloader: DataLoader, loss_fn, device="cuda"):
+def eval(model, dataloader: DataLoader, loss_fn, is_variational=False, device="cuda"):
     """Evaluation function."""
     num_batches = len(dataloader)
 
@@ -68,8 +86,9 @@ def eval(model, dataloader: DataLoader, loss_fn, device="cuda"):
         for batch in dataloader:
             data = batch["data"].to(device)
 
-            prediction = model(data)
-            loss = loss_fn(prediction, data)
+            prediction, z_mean, z_log_var = model(data)
+            loss = calc_loss(loss_fn, prediction, data, z_mean, z_log_var)
+
             test_loss += loss.item()
 
             progress_bar.update(1)
@@ -95,13 +114,15 @@ def preprocess(imgs):
     return {"data": imgs}
 
 
+USE_MULTI_VARIATIONAL = True
+
 if __name__ == "__main__":
     epoch = 100
     stop_threshold = 10
 
     model_path = "vae_3_rmse.pt"
 
-    model = VariationalAutoencoder()
+    model = VariationalAutoencoder(USE_MULTI_VARIATIONAL)
 
     if os.path.exists(model_path):
         print("Loaded model")
@@ -109,6 +130,7 @@ if __name__ == "__main__":
 
     mseloss = nn.MSELoss()
 
+    # RMSE
     def loss_fn(x, y):
         return torch.sqrt(mseloss(x, y))
 
@@ -151,13 +173,15 @@ if __name__ == "__main__":
 
     model = model.to("cuda")
 
-    current_best_loss = eval(model, test_dataloader, loss_fn)
+    current_best_loss = eval(model, test_dataloader, loss_fn, USE_MULTI_VARIATIONAL)
 
     no_improvement = 0
     for _ in range(epoch):
-        train(model, train_dataloader, loss_fn, optimizer, progress)
+        train(
+            model, train_dataloader, loss_fn, optimizer, progress, USE_MULTI_VARIATIONAL
+        )
 
-        loss = eval(model, test_dataloader, loss_fn)
+        loss = eval(model, test_dataloader, loss_fn, USE_MULTI_VARIATIONAL)
         scheduler.step()
 
         if loss < current_best_loss:
