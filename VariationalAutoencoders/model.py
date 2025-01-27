@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
@@ -6,11 +7,27 @@ PRE_EMBEDDING_SIZE = 4 * 4 * 128
 EMBEDDING_SIZE = 3
 
 
+def sampling(x):
+    z_mean, z_log_var = x
+
+    batch = z_mean.shape[0]
+    dim = z_mean.shape[1]
+
+    epsilon = torch.tensor(np.random.normal(size=(batch, dim)), dtype=z_mean.dtype).to(
+        z_mean.device
+    )
+
+    return z_mean + torch.exp(0.5 * z_log_var) * epsilon
+
+
 class VariationalAutoencoderEncoder(nn.Module):
     """Example Module for an Encoder in a VariationalAutoencoder"""
 
-    def __init__(self):
+    def __init__(self, is_variational=False):
         super(VariationalAutoencoderEncoder, self).__init__()
+
+        self.is_variational = is_variational
+
         # ENCODER
         # 32x32
         self.conv1 = nn.Conv2d(1, 32, (3, 3), stride=2, padding=(1, 1))
@@ -20,7 +37,11 @@ class VariationalAutoencoderEncoder(nn.Module):
         self.conv3 = nn.Conv2d(64, 128, (3, 3), stride=2, padding=(1, 1))
 
         self.flat = nn.Flatten()
+
         self.embed = nn.Linear(PRE_EMBEDDING_SIZE, EMBEDDING_SIZE)
+
+        self.mean = nn.Linear(PRE_EMBEDDING_SIZE, EMBEDDING_SIZE)
+        self.log_var = nn.Linear(PRE_EMBEDDING_SIZE, EMBEDDING_SIZE)
 
     def forward(self, x):
         # ENCODER
@@ -28,9 +49,18 @@ class VariationalAutoencoderEncoder(nn.Module):
         x = F.relu(self.conv2(x))
         x = F.relu(self.conv3(x))
         x = self.flat(x)
-        x = self.embed(x)
 
-        return x
+        z_mean = None
+        z_log_var = None
+
+        if self.is_variational:
+            z_mean = self.mean(x)
+            z_log_var = self.log_var(x)
+            x = sampling([z_mean, z_log_var])
+        else:
+            x = self.embed(x)
+
+        return x, z_mean, z_log_var
 
 
 class VariationalAutoencoderDecoder(nn.Module):
@@ -69,13 +99,17 @@ class VariationalAutoencoderDecoder(nn.Module):
 class VariationalAutoencoder(nn.Module):
     """Example Module for an VariationalAutoencoder"""
 
-    def __init__(self):
+    def __init__(self, is_variational=False):
         super(VariationalAutoencoder, self).__init__()
-        self.encoder = VariationalAutoencoderEncoder()
+        self.is_variational = is_variational
+        self.encoder = VariationalAutoencoderEncoder(self.is_variational)
         self.decoder = VariationalAutoencoderDecoder()
 
     def forward(self, x):
-        x = self.encoder(x)
+        x, z_mean, z_log_var = self.encoder(x)
         x = self.decoder(x)
 
-        return x
+        if self.is_variational:
+            return x, z_mean, z_log_var
+        else:
+            return x, None, None
