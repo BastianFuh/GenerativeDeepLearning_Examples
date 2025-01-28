@@ -4,7 +4,6 @@ import torch.nn.functional as F
 import numpy as np
 
 PRE_EMBEDDING_SIZE = 4 * 4 * 128
-EMBEDDING_SIZE = 3
 
 
 def sampling(x):
@@ -23,7 +22,7 @@ def sampling(x):
 class VariationalAutoencoderEncoder(nn.Module):
     """Example Module for an Encoder in a VariationalAutoencoder"""
 
-    def __init__(self, is_variational=False):
+    def __init__(self, is_variational=False, embedding_size=3):
         super(VariationalAutoencoderEncoder, self).__init__()
 
         self.is_variational = is_variational
@@ -38,10 +37,10 @@ class VariationalAutoencoderEncoder(nn.Module):
 
         self.flat = nn.Flatten()
 
-        self.embed = nn.Linear(PRE_EMBEDDING_SIZE, EMBEDDING_SIZE)
+        self.embed = nn.Linear(PRE_EMBEDDING_SIZE, embedding_size)
 
-        self.mean = nn.Linear(PRE_EMBEDDING_SIZE, EMBEDDING_SIZE)
-        self.log_var = nn.Linear(PRE_EMBEDDING_SIZE, EMBEDDING_SIZE)
+        self.mean = nn.Linear(PRE_EMBEDDING_SIZE, embedding_size)
+        self.log_var = nn.Linear(PRE_EMBEDDING_SIZE, embedding_size)
 
     def forward(self, x):
         # ENCODER
@@ -66,9 +65,9 @@ class VariationalAutoencoderEncoder(nn.Module):
 class VariationalAutoencoderDecoder(nn.Module):
     """Example Module for an Decoder in a VariationalAutoencoder"""
 
-    def __init__(self):
+    def __init__(self, embedding_size=3):
         super(VariationalAutoencoderDecoder, self).__init__()
-        self.linear2 = nn.Linear(EMBEDDING_SIZE, PRE_EMBEDDING_SIZE)
+        self.linear2 = nn.Linear(embedding_size, PRE_EMBEDDING_SIZE)
 
         # 4x4
         self.convtrans1 = nn.ConvTranspose2d(
@@ -99,11 +98,13 @@ class VariationalAutoencoderDecoder(nn.Module):
 class VariationalAutoencoder(nn.Module):
     """Example Module for an VariationalAutoencoder"""
 
-    def __init__(self, is_variational=False):
+    def __init__(self, is_variational=False, embedding_size=3):
         super(VariationalAutoencoder, self).__init__()
         self.is_variational = is_variational
-        self.encoder = VariationalAutoencoderEncoder(self.is_variational)
-        self.decoder = VariationalAutoencoderDecoder()
+        self.encoder = VariationalAutoencoderEncoder(
+            self.is_variational, embedding_size=embedding_size
+        )
+        self.decoder = VariationalAutoencoderDecoder(embedding_size=embedding_size)
 
     def forward(self, x):
         x, z_mean, z_log_var = self.encoder(x)
