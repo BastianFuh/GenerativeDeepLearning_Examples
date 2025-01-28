@@ -121,7 +121,10 @@ if __name__ == "__main__":
     epoch = 100
     stop_threshold = 10
 
-    model_path = f"vae_{EMBEDDING_SIZE}.pt"
+    if USE_MULTI_VARIATIONAL:
+        model_path = f"vae_{EMBEDDING_SIZE}.pt"
+    else:
+        model_path = f"ae_{EMBEDDING_SIZE}.pt"
 
     model = VariationalAutoencoder(USE_MULTI_VARIATIONAL, embedding_size=EMBEDDING_SIZE)
 
