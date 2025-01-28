@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 import datasets
-from model import VariationalAutoencoder, EMBEDDING_SIZE
+from model import VariationalAutoencoder
 import numpy as np
 import os
 import random
@@ -25,11 +25,18 @@ def collate_fn(batch):
     return result
 
 
-MODEL_PATH = "vae_3.pt"
+EMBEDDING_SIZE = 2
+USE_MULTI_VARIATIONAL = True
+
+if USE_MULTI_VARIATIONAL:
+    MODEL_PATH = f"vae_{EMBEDDING_SIZE}.pt"
+else:
+    MODEL_PATH = f"ae_{EMBEDDING_SIZE}.pt"
+
 DEVICE = "cuda"
 
 if __name__ == "__main__":
-    model = VariationalAutoencoder(True)
+    model = VariationalAutoencoder(USE_MULTI_VARIATIONAL, embedding_size=EMBEDDING_SIZE)
 
     if not os.path.exists(MODEL_PATH):
         print("Pleasure ensure that a model exists")
@@ -77,30 +84,43 @@ if __name__ == "__main__":
         )
 
     # Shows a scatter plot of the embedding space
-
     fig = plt.figure()
-    ax = fig.add_subplot(projection="3d")
-    total_embeddings = None
-    labels = list()
-    for data in test_dataloader:
-        x = data["data"].to(DEVICE)
-        labels.append(data["label"])
-        embedding, mean, _ = model.encoder(x)
-        if total_embeddings is None:
-            total_embeddings = mean
+    if EMBEDDING_SIZE == 2 or EMBEDDING_SIZE == 3:
+        if EMBEDDING_SIZE == 3:
+            ax = fig.add_subplot(projection="3d")
         else:
-            total_embeddings = torch.cat((total_embeddings, mean), 0)
+            ax = fig.add_subplot()
+        total_embeddings = None
+        labels = list()
+        for data in test_dataloader:
+            x = data["data"].to(DEVICE)
+            labels.append(data["label"])
+            embedding, mean, _ = model.encoder(x)
+            if total_embeddings is None:
+                total_embeddings = mean
+            else:
+                total_embeddings = torch.cat((total_embeddings, mean), 0)
 
-    total_embeddings = total_embeddings.cpu().detach()
+        total_embeddings = total_embeddings.cpu().detach()
 
-    sc = ax.scatter(
-        total_embeddings[:, 0],
-        total_embeddings[:, 1],
-        total_embeddings[:, 2],
-        c=labels,
-        alpha=0.5,
-        s=3,
-        cmap="gist_rainbow",
-    )
-    fig.colorbar(sc)
+        if EMBEDDING_SIZE == 3:
+            sc = ax.scatter(
+                total_embeddings[:, 0],
+                total_embeddings[:, 1],
+                total_embeddings[:, 2],
+                c=labels,
+                alpha=0.5,
+                s=3,
+                cmap="gist_rainbow",
+            )
+        else:
+            sc = ax.scatter(
+                total_embeddings[:, 0],
+                total_embeddings[:, 1],
+                c=labels,
+                alpha=0.5,
+                s=3,
+                cmap="gist_rainbow",
+            )
+        fig.colorbar(sc)
     plt.show()
