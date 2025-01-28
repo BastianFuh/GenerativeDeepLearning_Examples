@@ -114,15 +114,16 @@ def preprocess(imgs):
     return {"data": imgs}
 
 
+EMBEDDING_SIZE = 3
 USE_MULTI_VARIATIONAL = True
 
 if __name__ == "__main__":
     epoch = 100
     stop_threshold = 10
 
-    model_path = "vae_3_rmse.pt"
+    model_path = f"vae_{EMBEDDING_SIZE}.pt"
 
-    model = VariationalAutoencoder(USE_MULTI_VARIATIONAL)
+    model = VariationalAutoencoder(USE_MULTI_VARIATIONAL, embedding_size=EMBEDDING_SIZE)
 
     if os.path.exists(model_path):
         print("Loaded model")
