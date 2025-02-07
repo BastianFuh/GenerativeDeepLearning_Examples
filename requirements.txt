@@ -58,15 +58,11 @@ scipy==1.14.1
 six==1.16.0
 tensorboard==2.18.0
 tensorboard-data-server==0.7.2
-tensorflow==2.18.0
-tensorflow-io-gcs-filesystem==0.31.0
-tensorflow_intel==2.18.0
 termcolor==2.5.0
-tf_keras==2.18.0
 threadpoolctl==3.5.0
 tokenizers==0.20.1
 --extra-index-url https://download.pytorch.org/whl/cu124
-torch==2.5.1+cu124
+torch==2.6.0+cu124
 torchsummary==1.5.1
 tqdm==4.66.6
 transformers==4.46.1
@@ -79,4 +75,4 @@ xxhash==3.5.0
 yarl==1.17.1
 matplotlib==3.9.2
 torcheval==0.0.7
-torchvision==0.20.1
+torchvision==0.21.0+cu124
