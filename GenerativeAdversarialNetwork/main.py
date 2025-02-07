@@ -228,7 +228,7 @@ if __name__ == "__main__":
 
     # Prepare data
     dataset = datasets.load_dataset("./GenerativeAdversarialNetwork/dataset")
-    dataset = dataset["train"].train_test_split(0.9)
+    dataset = dataset["train"].train_test_split(0.1)
 
     data_transform = {
         "train": transforms.Compose(
@@ -260,7 +260,7 @@ if __name__ == "__main__":
         dataset["train"],
         collate_fn=collate_fn,
         num_workers=4,
-        batch_size=32,
+        batch_size=64,
         shuffle=True,
         pin_memory=True,
         prefetch_factor=4,
