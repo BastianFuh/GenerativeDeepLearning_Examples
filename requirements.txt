@@ -72,7 +72,8 @@ tokenizers==0.20.1
 --extra-index-url https://download.pytorch.org/whl/cu124
 torch==2.6.0+cu124
 torcheval==0.0.7
-torchsummary==1.5.1
+torchinfo==1.8.0
+torchtext==0.18.0
 torchvision==0.21.0+cu124
 tqdm==4.66.6
 transformers==4.46.1
