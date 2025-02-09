@@ -7,11 +7,13 @@ class LSTM(nn.Module):
 
     def __init__(self):
         super(LSTM, self).__init__()
-        self.embedding = nn.Embedding()
-        self.lstm = nn.LSTM()
+        self.embedding = nn.Embedding(10000, 100)
+        self.lstm = nn.LSTM(100, 128, batch_first=True)
+        self.output = nn.Linear(128, 10000)
 
     def forward(self, x):
-        x = self.embedding(x)
-        x = self.lstm(x)
+        x = self.embedding(x.long())
+        x, _ = self.lstm(x)
+        x = self.output(x)
 
         return x
