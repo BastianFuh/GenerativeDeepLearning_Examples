@@ -5,17 +5,16 @@ This example is based on a example given in
 The author originally used Keras and Tensorflow however this example adepted the concept to pytorch.
 
 !IMPORTANT!
-This model requires a dataset from [1] to work. Download the dataset and copy the dataset folder into the
-folder this script resides in.
+This model requires a dataset from [1] to work. Download the dataset and copy the json file into a folder
+called dataset.
 
-[1] https://www.kaggle.com/datasets/joosthazelzet/lego-brick-images
+[1] https://www.kaggle.com/datasets/hugodarwood/epirecipes
 
 
 
-This script trains a Deep Convolutional Generative Adversarial Network. The goal is it to pit
-two models, a generator and a descriminator, against each other. The generator tries to generate
-images that the discriminator detects as real. The discriminator then tries to detect all the fake
-images.
+This script trains a Long Short-Term Memory(LSTM) Network. This network is a subtype of recurrent neural
+networks(RNN). The unique aspect this model is that is does not only use a hidden state but also a cell state
+which is continously updates with new data from the input.
 
 
 """
@@ -43,7 +42,8 @@ from funcs import (
     yield_text,
     tokenize_and_pad,
 )
-from model import LSTM
+
+from model import LSTM, NUM_CLASSES
 
 
 if __name__ == "__main__":
@@ -51,8 +51,9 @@ if __name__ == "__main__":
     stop_threshold = 10
 
     model_path = "lstm.pt"
+    tokenizer_path = "tokenizer_lstm.pt"
 
-    model = LSTM()
+    model = LSTM(inference=False)
 
     if os.path.exists(model_path):
         print("Loaded model")
@@ -64,14 +65,12 @@ if __name__ == "__main__":
 
     summary(
         model,
-        [201],
+        [2, 201],
         device="cpu",
     )
 
     # Prepare data
     dataset = datasets.load_dataset("./LongShortTermMemory/dataset/")
-
-    print(dataset)
 
     # Get column names for later
     sections = dataset["train"].column_names
@@ -88,19 +87,24 @@ if __name__ == "__main__":
 
     dataset = dataset.map(pad_punctuation)
 
-    tokenizer = Tokenizer(models.WordLevel(unk_token="<unk>"))
-    tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
+    tokenizer: Tokenizer = None
 
-    trainer = trainers.WordLevelTrainer(
-        vocab_size=10000, special_tokens=["<pad>", "<unk>"]
-    )
-    tokenizer.train_from_iterator(yield_text(dataset), trainer=trainer)
+    if os.path.exists(tokenizer_path):
+        tokenizer = Tokenizer.from_file(tokenizer_path)
+    else:
+        Tokenizer(models.WordLevel(unk_token="<unk>"))
+        tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
+
+        trainer = trainers.WordLevelTrainer(
+            vocab_size=NUM_CLASSES, special_tokens=["<pad>", "<unk>"]
+        )
+        tokenizer.train_from_iterator(yield_text(dataset), trainer=trainer)
+
+        tokenizer.save("tokenizer_lstm.pt")
 
     funcs.tokenizer = tokenizer
 
-    dataset = dataset.map(
-        lambda x: {"tokens": tokenize_and_pad(tokenizer, x["padded_text"])}
-    )
+    dataset = dataset.map(tokenize_and_pad)
 
     dataset = dataset.map(prepare_inputs)
 
@@ -126,7 +130,7 @@ if __name__ == "__main__":
         dataset["test"],
         collate_fn=collate_fn,
         num_workers=4,
-        batch_size=32,
+        batch_size=16,
         pin_memory=True,
         prefetch_factor=4,
         persistent_workers=True,
@@ -137,6 +141,8 @@ if __name__ == "__main__":
     model = model.to("cuda")
 
     current_best_loss = eval(model, test_dataloader, loss_fn)
+
+    print(f"Initial Loss {current_best_loss}")
 
     no_improvement = 0
     for _ in range(epoch):

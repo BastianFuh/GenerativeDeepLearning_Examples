@@ -5,6 +5,8 @@ from torch.nn import functional as F
 from tqdm import tqdm
 import torch
 
+from model import NUM_CLASSES
+
 tokenizer = None
 
 
@@ -19,7 +21,6 @@ def train(
     """Training function"""
 
     num_batches = len(dataloader)
-    print(num_batches)
     reporting_interval = int(num_batches / 5)
     test_loss = 0.0
 
@@ -29,8 +30,11 @@ def train(
     for i, batch in enumerate(dataloader):
         data = batch["tokens"].to(device)
         target = batch["labels"].to(device)
+        input_length = batch["input_length"].to(device)
 
-        prediction = model(data)
+        prediction = model(data, input_length)
+
+        prediction = prediction.permute([0, 2, 1])
 
         loss = loss_fn(prediction, target)
 
@@ -64,6 +68,9 @@ def eval(model, dataloader: DataLoader, loss_fn, device="cuda"):
 
             prediction = model(data)
 
+            prediction = prediction.permute([0, 2, 1])
+            target = target.flatten(start_dim=1, end_dim=-1)
+
             loss = loss_fn(prediction, target)
 
             test_loss += loss.item()
@@ -80,9 +87,11 @@ def collate_fn(batch):
     result = dict()
 
     result["tokens"] = torch.tensor([x["tokens"] for x in batch], dtype=torch.int64)
-    result["labels"] = F.one_hot(
-        torch.tensor([x["labels"] for x in batch], dtype=torch.int64), num_classes=10000
-    ).to(torch.float32)
+
+    result["labels"] = torch.tensor([x["labels"] for x in batch]).to(torch.int64)
+    result["input_length"] = torch.tensor(
+        [x["input_length"] for x in batch], dtype=torch.int64
+    )
 
     return result
 
@@ -105,15 +114,15 @@ def yield_text(dataset):
         yield x
 
 
-def tokenize_and_pad(tokenizer, text):
-    encoding = tokenizer.encode(text)
+def tokenize_and_pad(text):
+    encoding = tokenizer.encode(text["padded_text"])
     token_ids = encoding.ids[:201]  # Truncate if longer than max_seq_length
 
     # Pad if shorter
-    pad_length = max(0, 201 - len(token_ids))
+    input_length = len(token_ids)
+    pad_length = max(0, 201 - input_length)
     token_ids.extend([tokenizer.token_to_id("<pad>")] * pad_length)
-
-    return token_ids
+    return {"tokens": token_ids, "input_length": input_length}
 
 
 def prepare_inputs(text):
