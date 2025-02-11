@@ -30,9 +30,8 @@ def train(
     for i, batch in enumerate(dataloader):
         data = batch["tokens"].to(device)
         target = batch["labels"].to(device)
-        input_length = batch["input_length"].to(device)
 
-        prediction = model(data, input_length)
+        prediction = model(data)
 
         prediction = prediction.permute([0, 2, 1])
 
@@ -69,7 +68,6 @@ def eval(model, dataloader: DataLoader, loss_fn, device="cuda"):
             prediction = model(data)
 
             prediction = prediction.permute([0, 2, 1])
-            target = target.flatten(start_dim=1, end_dim=-1)
 
             loss = loss_fn(prediction, target)
 
@@ -89,15 +87,12 @@ def collate_fn(batch):
     result["tokens"] = torch.tensor([x["tokens"] for x in batch], dtype=torch.int64)
 
     result["labels"] = torch.tensor([x["labels"] for x in batch]).to(torch.int64)
-    result["input_length"] = torch.tensor(
-        [x["input_length"] for x in batch], dtype=torch.int64
-    )
 
     return result
 
 
 def preprocess(x):
-    trainings_text = f"Recipe for {x['title']}  |  {x['directions']}"
+    trainings_text = f"Recipe for {x['title']} | {' '.join(x['directions'])}"
 
     return {"data": trainings_text}
 
@@ -106,6 +101,7 @@ def pad_punctuation(s):
     padded_text = re.sub(f"([{string.punctuation}])", r" \1 ", s["data"])
     padded_text = re.sub(" +", " ", padded_text)
     padded_text = padded_text.lower()
+
     return {"padded_text": padded_text}
 
 

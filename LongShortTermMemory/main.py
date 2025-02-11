@@ -28,7 +28,6 @@ import datasets
 from torchinfo import summary
 from tqdm import tqdm
 
-
 import os
 
 import funcs
@@ -59,7 +58,7 @@ if __name__ == "__main__":
         print("Loaded model")
         model.load_state_dict(torch.load(model_path, weights_only=True))
 
-    loss_fn = nn.CrossEntropyLoss()
+    loss_fn = nn.CrossEntropyLoss(ignore_index=0)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0002)
 
@@ -70,11 +69,14 @@ if __name__ == "__main__":
     )
 
     # Prepare data
-    dataset = datasets.load_dataset("./LongShortTermMemory/dataset/")
+    dataset = datasets.load_dataset(
+        "./LongShortTermMemory/dataset/", keep_in_memory=True
+    )
 
     # Get column names for later
     sections = dataset["train"].column_names
 
+    #
     # Filter out malformed datapoints
     dataset = dataset.filter(lambda x: x["title"] is not None)
     dataset = dataset.filter(lambda x: x["directions"] is not None)
@@ -92,7 +94,7 @@ if __name__ == "__main__":
     if os.path.exists(tokenizer_path):
         tokenizer = Tokenizer.from_file(tokenizer_path)
     else:
-        Tokenizer(models.WordLevel(unk_token="<unk>"))
+        tokenizer = Tokenizer(models.WordLevel(unk_token="<unk>"))
         tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
 
         trainer = trainers.WordLevelTrainer(
@@ -142,9 +144,10 @@ if __name__ == "__main__":
 
     current_best_loss = eval(model, test_dataloader, loss_fn)
 
-    print(f"Initial Loss {current_best_loss}")
+    tqdm.write(f"Initial Loss {current_best_loss}")
 
     no_improvement = 0
+
     for _ in range(epoch):
         train(model, train_dataloader, loss_fn, optimizer, progress)
 

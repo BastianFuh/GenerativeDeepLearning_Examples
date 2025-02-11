@@ -11,11 +11,11 @@ class LSTM(nn.Module):
     def __init__(self, inference=True):
         super(LSTM, self).__init__()
         self.embedding = nn.Embedding(NUM_CLASSES, 100)
-        self.lstm = nn.LSTM(100, 128, batch_first=True)
+        self.lstm = nn.LSTM(100, 128, batch_first=True, bias=False)
         self.output = nn.Linear(128, NUM_CLASSES)
         self.inference = inference
 
-    def forward(self, x, input_length=201):
+    def forward(self, x):
         x = self.embedding(x.long())
         x, _ = self.lstm(x)
 
