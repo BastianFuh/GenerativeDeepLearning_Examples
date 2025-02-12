@@ -37,7 +37,7 @@ class TextGenerator:
         probs = probs.cpu().detach().numpy().flatten()
         return self.random_generator.choice(len(probs), p=probs), probs
 
-    def generate(self, start_prompt, max_tokens, temperature):
+    def generate(self, start_prompt, max_tokens, temperature, print_intermidiate=False):
         prompt = start_prompt
         sample_token = None
 
@@ -54,7 +54,8 @@ class TextGenerator:
 
             prompt += f" {self.tokenizer.decode([out[0]])}"
 
-            print(f"{iteration}: {prompt}")
+            if print_intermidiate:
+                print(f"{iteration}: {prompt}")
 
         print("\n", prompt)
 
@@ -62,4 +63,4 @@ class TextGenerator:
 if __name__ == "__main__":
     generator = TextGenerator()
 
-    generator.generate("recipe for a vegetarian", 201, 0.5)
+    generator.generate("recipe for vegetarian", 201, 0.5)
