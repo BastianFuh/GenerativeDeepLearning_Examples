@@ -129,3 +129,15 @@ def offset_cosine_diffusion_schedule(diffusion_times):
     noise_rates = torch.sin(diffusion_angles)
 
     return noise_rates, signal_rates
+
+
+def sinusoidal_embedding(x):
+    frequecies = torch.exp(torch.linspace(torch.log(1), torch.log(1000), 16))
+
+    angular_speed = 2.0 * torch.pi * frequecies
+
+    embeddings = torch.concat(
+        [torch.sin(angular_speed * x), torch.cos(angular_speed * x)], dim=3
+    )
+
+    return embeddings
