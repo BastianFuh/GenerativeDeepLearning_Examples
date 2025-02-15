@@ -46,7 +46,7 @@ if __name__ == "__main__":
 
     model_path = "diffusion.pt"
 
-    # model = DiffusionModel()
+    model = DiffusionModel(True)
 
     if os.path.exists(model_path):
         print("Loaded model")
@@ -54,13 +54,13 @@ if __name__ == "__main__":
 
     loss_fn = nn.CrossEntropyLoss(ignore_index=0)
 
-    # optimizer = torch.optim.Adam(model.parameters(), lr=0.0002)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0002)
 
-    # summary(
-    #    model,
-    #    [2, 201],
-    #    device="cpu",
-    # )
+    summary(
+        model,
+        [2, 3, 64, 64],
+        device="cpu",
+    )
 
     # Prepare data
     dataset = datasets.load_dataset("./Diffusion/dataset")

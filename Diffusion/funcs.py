@@ -132,12 +132,17 @@ def offset_cosine_diffusion_schedule(diffusion_times):
 
 
 def sinusoidal_embedding(x):
-    frequecies = torch.exp(torch.linspace(torch.log(1), torch.log(1000), 16))
+    frequecies = torch.exp(
+        torch.linspace(torch.log(torch.tensor(1)), torch.log(torch.tensor(1000)), 16)
+    )
 
     angular_speed = 2.0 * torch.pi * frequecies
 
     embeddings = torch.concat(
         [torch.sin(angular_speed * x), torch.cos(angular_speed * x)], dim=3
     )
+
+    # Create the correct shape [N, C, H, W], batch, channels, height, width
+    embeddings = torch.transpose(embeddings, 1, 3)
 
     return embeddings
