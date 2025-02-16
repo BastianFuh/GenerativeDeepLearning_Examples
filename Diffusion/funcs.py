@@ -1,6 +1,21 @@
+import PIL.Image
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import torch
+
+import PIL
+
+
+def process(batch, loss_fn, model, device):
+    data = batch["data"].to(device)
+
+    pred, noises = model(data)
+
+    pred_noises = pred[0]
+
+    loss = loss_fn(pred_noises, noises)
+
+    return loss
 
 
 def train(
@@ -21,21 +36,14 @@ def train(
 
     model.train()
     for i, batch in enumerate(dataloader):
-        data = batch["tokens"].to(device)
-        target = batch["labels"].to(device)
-
-        prediction = model(data)
-
-        prediction = prediction.permute([0, 2, 1])
-
-        loss = loss_fn(prediction, target)
-
+        loss = process(batch, loss_fn, model, device)
         test_loss += loss.item()
 
         loss.backward()
 
         optimizer.step()
         optimizer.zero_grad()
+        model.update_ema()
         progress_bar.update(1)
 
         if i % reporting_interval == 0 and i != 0:
@@ -55,15 +63,7 @@ def eval(model, dataloader: DataLoader, loss_fn, device="cuda"):
     model.eval()
     with torch.no_grad():
         for batch in dataloader:
-            data = batch["tokens"].to(device)
-            target = batch["labels"].to(device)
-
-            prediction = model(data)
-
-            prediction = prediction.permute([0, 2, 1])
-
-            loss = loss_fn(prediction, target)
-
+            loss = process(batch, loss_fn, model, device)
             test_loss += loss.item()
 
             progress_bar.update(1)
@@ -77,10 +77,15 @@ def eval(model, dataloader: DataLoader, loss_fn, device="cuda"):
 def collate_fn(batch):
     result = dict()
 
-    result["image"] = torch.stack([x["image"] for x in batch])
-    result["label"] = torch.stack([x["label"] for x in batch])
+    result["data"] = torch.stack([x["image_data"] for x in batch])
 
     return result
+
+
+def map_pil(x):
+    image_data = [PIL.Image.open(entry["path"]) for entry in x["image"]]
+
+    return {"image_data": image_data}
 
 
 def to_tensor(obj):
@@ -134,7 +139,7 @@ def offset_cosine_diffusion_schedule(diffusion_times):
 def sinusoidal_embedding(x):
     frequecies = torch.exp(
         torch.linspace(torch.log(torch.tensor(1)), torch.log(torch.tensor(1000)), 16)
-    )
+    ).to(x.device)
 
     angular_speed = 2.0 * torch.pi * frequecies
 

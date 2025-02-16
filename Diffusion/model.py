@@ -108,7 +108,7 @@ class UNet(nn.Module):
         # This is mainly used so that the architecture of the model can be shown via
         # summary. For training and inference the noise_variance variable should be set
         if noise_variances is None:
-            noise_variances = torch.Tensor(x.shape[0], 1, 1, 1)
+            noise_variances = torch.Tensor(x.shape[0], 1, 1, 1).to(x.device)
 
         noise_embedding = sinusoidal_embedding(noise_variances)
 
@@ -157,7 +157,7 @@ class DiffusionModel(nn.Module):
         if self.ema_network is None:
             self.create_ema()
 
-        for param, ema_param in zip(self.parameters(), self.ema.parameters()):
+        for param, ema_param in zip(self.parameters(), self.ema_network.parameters()):
             ema_param.data.mul_(0.99).add_(0.01 * param.data)
 
     def denoise(self, noisy_images, noise_rates, signal_rates):
@@ -175,16 +175,16 @@ class DiffusionModel(nn.Module):
         if isinstance(x, list):
             x = torch.concat(x, dim=1)
 
-        noises = torch.normal(0, 1, size=x.shape)
+        noises = torch.normal(0, 1, size=x.shape).to(x.device)
         batch_size = x.shape[0]
 
-        diffusion_times = torch.rand(size=(batch_size, 1, 1, 1))
+        diffusion_times = torch.rand(size=(batch_size, 1, 1, 1)).to(x.device)
 
         noise_rates, signal_rates = cosine_diffusion_schedule(diffusion_times)
 
         noisy_images = signal_rates * x + noise_rates * noises
 
         if self.in_training:
-            return self.denoise(noisy_images, noise_rates, signal_rates)
+            return self.denoise(noisy_images, noise_rates, signal_rates), noises
         else:
             return self.denoise(x, noise_rates, signal_rates)

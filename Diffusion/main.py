@@ -31,11 +31,7 @@ from tqdm import tqdm
 
 import os
 
-from funcs import (
-    train,
-    eval,
-    collate_fn,
-)
+from funcs import train, eval, collate_fn, map_pil
 
 from model import DiffusionModel
 
@@ -46,15 +42,18 @@ if __name__ == "__main__":
 
     model_path = "diffusion.pt"
 
-    model = DiffusionModel(True)
+    model = DiffusionModel(in_training=True)
 
     if os.path.exists(model_path):
         print("Loaded model")
         model.load_state_dict(torch.load(model_path, weights_only=True))
+        model.ema_network.load_state_dict(
+            torch.load(f"ema-{model_path}", weights_only=True)
+        )
 
-    loss_fn = nn.CrossEntropyLoss(ignore_index=0)
+    loss_fn = nn.L1Loss()
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0002)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
 
     summary(
         model,
@@ -63,7 +62,9 @@ if __name__ == "__main__":
     )
 
     # Prepare data
-    dataset = datasets.load_dataset("./Diffusion/dataset")
+    dataset = datasets.load_dataset("./Diffusion/dataset").cast_column(
+        "image", datasets.Image(decode=True)
+    )
 
     # Repeat every data point 5 times to increase dataset size
     for label in dataset:
@@ -98,7 +99,12 @@ if __name__ == "__main__":
         ),
     }
 
+    dataset = dataset.map(map_pil, batched=True)
+
+    dataset = dataset.remove_columns("image")
+
     for label in dataset:
+        print(label)
         dataset[label].set_transform(data_transform[label])
 
     print(dataset)
@@ -114,6 +120,16 @@ if __name__ == "__main__":
         persistent_workers=True,
     )
 
+    eval_dataloader = DataLoader(
+        dataset["validation"],
+        collate_fn=collate_fn,
+        num_workers=4,
+        batch_size=16,
+        pin_memory=True,
+        prefetch_factor=4,
+        persistent_workers=True,
+    )
+
     test_dataloader = DataLoader(
         dataset["test"],
         collate_fn=collate_fn,
@@ -124,13 +140,11 @@ if __name__ == "__main__":
         persistent_workers=True,
     )
 
-    exit()
-
     progress = tqdm(range(len(train_dataloader) * epoch), position=0)
 
     model = model.to("cuda")
 
-    current_best_loss = eval(model, test_dataloader, loss_fn)
+    current_best_loss = eval(model, eval_dataloader, loss_fn)
 
     tqdm.write(f"Initial Loss {current_best_loss}")
 
@@ -139,13 +153,14 @@ if __name__ == "__main__":
     for _ in range(epoch):
         train(model, train_dataloader, loss_fn, optimizer, progress)
 
-        loss = eval(model, test_dataloader, loss_fn)
+        loss = eval(model, eval_dataloader, loss_fn)
 
         if loss < current_best_loss:
             tqdm.write(f"Saved new best model. {loss} vs {current_best_loss}")
             current_best_loss = loss
             no_improvement = 0
             torch.save(model.state_dict(), model_path)
+            torch.save(model.ema_network.state_dict(), f"ema-{model_path}")
         else:
             no_improvement += 1
             if no_improvement == stop_threshold:
