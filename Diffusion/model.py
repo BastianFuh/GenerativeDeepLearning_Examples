@@ -2,12 +2,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim.swa_utils as swa_utils
+from torch import Tensor
 
-from funcs import cosine_diffusion_schedule, sinusoidal_embedding
+from funcs import offset_cosine_diffusion_schedule, sinusoidal_embedding
+
+
+from matplotlib import pyplot as plt
 
 
 class ResidualBlock(nn.Module):
-    def __init__(self, output_channels, scale_residual=False):
+    def __init__(self, output_channels: int, scale_residual: bool = False) -> None:
         super(ResidualBlock, self).__init__()
 
         self.scale_residual = scale_residual
@@ -20,7 +24,7 @@ class ResidualBlock(nn.Module):
         self.conv_1 = nn.LazyConv2d(output_channels, 3, padding="same")
         self.conv_2 = nn.Conv2d(output_channels, output_channels, 3, padding="same")
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         if self.scale_residual:
             residual = self.scale(x)
         else:
@@ -36,7 +40,7 @@ class ResidualBlock(nn.Module):
 
 
 class DownBlock(nn.Module):
-    def __init__(self, input_channels, output_channels):
+    def __init__(self, input_channels: int, output_channels: int) -> None:
         super(DownBlock, self).__init__()
 
         self.residual_1 = ResidualBlock(output_channels, True)
@@ -56,13 +60,13 @@ class DownBlock(nn.Module):
 
 
 class UpBlock(nn.Module):
-    def __init__(self, input_channels, output_channels):
+    def __init__(self, input_channels: int, output_channels: int) -> None:
         super(UpBlock, self).__init__()
 
         self.residual_1 = ResidualBlock(output_channels, True)
         self.residual_2 = ResidualBlock(output_channels, True)
 
-    def forward(self, x, skips=list()):
+    def forward(self, x: Tensor, skips: list = list()) -> Tensor:
         # Upsampling
         x = F.interpolate(x, scale_factor=2, mode="bilinear", align_corners=False)
 
@@ -78,7 +82,7 @@ class UpBlock(nn.Module):
 class UNet(nn.Module):
     """Example Module for an UNet Network"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(UNet, self).__init__()
 
         self.input_conv = nn.Conv2d(3, 32, 1)
@@ -102,7 +106,7 @@ class UNet(nn.Module):
         nn.init.zeros_(self.output_conv.weight)
         nn.init.zeros_(self.output_conv.bias)
 
-    def forward(self, x, noise_variances=None):
+    def forward(self, x: Tensor, noise_variances: Tensor = None) -> Tensor:
         x = self.input_conv(x)
 
         # This is mainly used so that the architecture of the model can be shown via
@@ -139,39 +143,47 @@ class UNet(nn.Module):
 class DiffusionModel(nn.Module):
     """Example Module for an Diffusion Network"""
 
-    def __init__(self, in_training=False):
+    def __init__(self, in_training: bool = False, use_ema: bool = False) -> None:
         super(DiffusionModel, self).__init__()
         self.network = UNet()
-        self.inference = cosine_diffusion_schedule
+        self.diffusion_schedule = offset_cosine_diffusion_schedule
         self.ema_network = None
         self.in_training = in_training
+        self.use_ema = use_ema
 
-    def create_ema(self):
+    def create_ema(self) -> None:
         """Creates the ema network.
         This is not done in the constructor because the model uses lazy modules. Without
         running the model atleast once the lazy modules do not have an assosiated size
         and therfore can not be deep copied to a new model."""
         self.ema_network = swa_utils.AveragedModel(self.network)
 
-    def update_ema(self):
+    def update_ema(self) -> None:
         if self.ema_network is None:
             self.create_ema()
 
         for param, ema_param in zip(self.parameters(), self.ema_network.parameters()):
             ema_param.data.mul_(0.99).add_(0.01 * param.data)
 
-    def denoise(self, noisy_images, noise_rates, signal_rates):
+    def denoise(
+        self, noisy_images: Tensor, noise_rates: Tensor, signal_rates: Tensor
+    ) -> tuple[Tensor, Tensor]:
         if self.in_training:
             network = self.network
         else:
-            network = self.ema_network
+            if self.use_ema:
+                network = self.ema_network
+            else:
+                network = self.network
 
         pred_noises = network(noisy_images, noise_rates**2)
         pred_images = (noisy_images - noise_rates * pred_noises) / signal_rates
 
         return pred_noises, pred_images
 
-    def forward(self, x):
+    def forward(
+        self, x: Tensor
+    ) -> tuple[tuple[Tensor, Tensor], Tensor] | tuple[Tensor, Tensor]:
         if isinstance(x, list):
             x = torch.concat(x, dim=1)
 
@@ -180,11 +192,57 @@ class DiffusionModel(nn.Module):
 
         diffusion_times = torch.rand(size=(batch_size, 1, 1, 1)).to(x.device)
 
-        noise_rates, signal_rates = cosine_diffusion_schedule(diffusion_times)
-
-        noisy_images = signal_rates * x + noise_rates * noises
+        noise_rates, signal_rates = self.diffusion_schedule(diffusion_times)
 
         if self.in_training:
+            noisy_images = signal_rates * x + noise_rates * noises
+
             return self.denoise(noisy_images, noise_rates, signal_rates), noises
         else:
             return self.denoise(x, noise_rates, signal_rates)
+
+    def reverse_diffusion(
+        self, initial_noise: Tensor, diffusion_steps: Tensor
+    ) -> Tensor:
+        num_images = initial_noise.shape[0]
+
+        step_size = 1.0 / diffusion_steps
+
+        current_images = initial_noise
+
+        for step in range(diffusion_steps):
+            diffusion_times = (
+                torch.ones((num_images, 1, 1, 1)).to(initial_noise.device)
+                - step * step_size
+            )
+            noise_rates, signal_rate = self.diffusion_schedule(diffusion_times)
+
+            pred_noises, pred_images = self.denoise(
+                current_images, noise_rates, signal_rate
+            )
+
+            next_diffustion_times = diffusion_times - step_size
+            next_noise_rates, next_signal_rates = self.diffusion_schedule(
+                next_diffustion_times
+            )
+
+            current_images = (
+                next_signal_rates * pred_images + next_noise_rates * pred_noises
+            )
+
+            plt.show()
+
+        return pred_images
+
+    def denormalize(self, images: Tensor) -> Tensor:
+        images = 0.5 + images * 0.5**0.5
+
+        return torch.clip(images, 0.0, 1.0)
+
+    def generate(self, num_images: Tensor, diffusion_steps: Tensor) -> Tensor:
+        initial_noise = torch.normal(0, 1, size=(num_images, 3, 64, 64))
+
+        generated_images = self.reverse_diffusion(initial_noise, diffusion_steps)
+        generated_images = self.denormalize(generated_images)
+
+        return generated_images, initial_noise
