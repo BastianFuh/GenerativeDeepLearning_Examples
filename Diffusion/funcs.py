@@ -1,12 +1,16 @@
-import PIL.Image
-from torch.utils.data import DataLoader
-from tqdm import tqdm
 import torch
-
 import PIL
+import PIL.Image
+
+from torch import Tensor
+from torch.optim import Optimizer
+from torch.nn import Module
+from torch.utils.data import DataLoader
+from datasets import Dataset
+from tqdm import tqdm
 
 
-def process(batch, loss_fn, model, device):
+def process(batch: Tensor, loss_fn: Module, model: Module, device: str) -> Tensor:
     data = batch["data"].to(device)
 
     pred, noises = model(data)
@@ -19,13 +23,13 @@ def process(batch, loss_fn, model, device):
 
 
 def train(
-    model,
+    model: Module,
     dataloader: DataLoader,
-    loss_fn,
-    optimizer,
+    loss_fn: Module,
+    optimizer: Optimizer,
     progress_bar: tqdm,
-    device="cuda",
-):
+    device: str = "cuda",
+) -> None:
     """Training function"""
 
     num_batches = len(dataloader)
@@ -52,7 +56,9 @@ def train(
             test_loss = 0.0
 
 
-def eval(model, dataloader: DataLoader, loss_fn, device="cuda"):
+def eval(
+    model: Module, dataloader: DataLoader, loss_fn: Module, device: str = "cuda"
+) -> str:
     """Evaluation function."""
     num_batches = len(dataloader)
 
@@ -74,7 +80,7 @@ def eval(model, dataloader: DataLoader, loss_fn, device="cuda"):
     return test_loss
 
 
-def collate_fn(batch):
+def collate_fn(batch: Tensor) -> dict[str, Tensor]:
     result = dict()
 
     result["data"] = torch.stack([x["image_data"] for x in batch])
@@ -82,20 +88,20 @@ def collate_fn(batch):
     return result
 
 
-def map_pil(x):
+def map_pil(x: Dataset) -> dict:
     image_data = [PIL.Image.open(entry["path"]) for entry in x["image"]]
 
     return {"image_data": image_data}
 
 
-def to_tensor(obj):
+def to_tensor(obj: int) -> Tensor:
     if not isinstance(obj, torch.Tensor):
         return torch.tensor(obj)
     else:
         return obj
 
 
-def linear_diffusion_schedule(diffusion_times):
+def linear_diffusion_schedule(diffusion_times: Tensor | int) -> tuple[Tensor, Tensor]:
     diffusion_times = to_tensor(diffusion_times)
 
     min_rate = 0.0001
@@ -110,7 +116,7 @@ def linear_diffusion_schedule(diffusion_times):
     return noise_rates, signal_rates
 
 
-def cosine_diffusion_schedule(diffusion_times):
+def cosine_diffusion_schedule(diffusion_times: Tensor | int) -> tuple[Tensor, Tensor]:
     diffusion_times = to_tensor(diffusion_times)
 
     signal_rates = torch.cos(diffusion_times * torch.pi / 2)
@@ -119,14 +125,16 @@ def cosine_diffusion_schedule(diffusion_times):
     return noise_rates, signal_rates
 
 
-def offset_cosine_diffusion_schedule(diffusion_times):
+def offset_cosine_diffusion_schedule(
+    diffusion_times: Tensor | int,
+) -> tuple[Tensor, Tensor]:
     diffusion_times = to_tensor(diffusion_times)
 
     min_signal_rate = 0.02
     max_singal_rate = 0.95
 
-    start_angle = torch.acos(max_singal_rate)
-    end_angle = torch.acos(min_signal_rate)
+    start_angle = torch.acos(torch.tensor(max_singal_rate))
+    end_angle = torch.acos(torch.tensor(min_signal_rate))
 
     diffusion_angles = start_angle + diffusion_times * (end_angle - start_angle)
 
@@ -136,7 +144,7 @@ def offset_cosine_diffusion_schedule(diffusion_times):
     return noise_rates, signal_rates
 
 
-def sinusoidal_embedding(x):
+def sinusoidal_embedding(x: Tensor) -> Tensor:
     frequecies = torch.exp(
         torch.linspace(torch.log(torch.tensor(1)), torch.log(torch.tensor(1000)), 16)
     ).to(x.device)
