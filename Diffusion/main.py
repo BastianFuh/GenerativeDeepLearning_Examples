@@ -46,7 +46,8 @@ if __name__ == "__main__":
 
     if os.path.exists(model_path):
         print("Loaded model")
-        model.load_state_dict(torch.load(model_path, weights_only=True))
+        model.load_state_dict(torch.load(model_path, weights_only=True), strict=False)
+        model.create_ema()
         model.ema_network.load_state_dict(
             torch.load(f"ema-{model_path}", weights_only=True)
         )
