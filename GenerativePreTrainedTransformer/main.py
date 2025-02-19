@@ -42,9 +42,8 @@ from funcs import (
     tokenize_and_pad,
 )
 
-exit()
-
-from model import GPT, NUM_CLASSES
+from model import GPT
+from const import NUM_CLASSES, SEQ_LENGTH
 
 
 if __name__ == "__main__":
@@ -54,7 +53,7 @@ if __name__ == "__main__":
     model_path = "gpt.pt"
     tokenizer_path = "tokenizer_gpt.pt"
 
-    model = GPT(inference=False)
+    model = GPT()
 
     if os.path.exists(model_path):
         print("Loaded model")
@@ -62,16 +61,18 @@ if __name__ == "__main__":
 
     loss_fn = nn.CrossEntropyLoss()
 
-    # optimizer = torch.optim.Adam(model.parameters(), lr=0.0002)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0002)
 
     summary(
         model,
-        [2, 201],
+        [8, SEQ_LENGTH],
         device="cpu",
     )
 
     # Prepare data
-    dataset = datasets.load_dataset("./GenerativePreTrainedTransformer/dataset/")
+    dataset = datasets.load_dataset(
+        "./GenerativePreTrainedTransformer/dataset/", cache_dir="./cache/"
+    )
 
     # Get column names for later
     sections = dataset["train"].column_names
@@ -97,7 +98,7 @@ if __name__ == "__main__":
         )
         tokenizer.train_from_iterator(yield_text(dataset), trainer=trainer)
 
-        tokenizer.save("tokenizer_lstm.pt")
+        tokenizer.save(tokenizer_path)
 
     funcs.tokenizer = tokenizer
 
@@ -111,8 +112,6 @@ if __name__ == "__main__":
     dataset = dataset["train"].train_test_split(0.1)
 
     print(dataset)
-
-    exit()
 
     train_dataloader = DataLoader(
         dataset["train"],
