@@ -48,6 +48,7 @@ class TransformerBlock(nn.Module):
             self.num_heads,
             kdim=key_dim,
             batch_first=True,
+            bias=False,
         )
 
         self.dropout_1 = nn.Dropout(dropout_rate)
@@ -72,7 +73,8 @@ class TransformerBlock(nn.Module):
             x,
             x,
             x,
-            attn_mask=causal_mask,
+            attn_mask=causal_mask[0],
+            is_causal=True,
             need_weights=self.return_attn_weights,
         )
 
@@ -99,23 +101,31 @@ class GPT(nn.Module):
         ff_dim: int = 256,
         max_len: int = SEQ_LENGTH,
         dropout_rate: int = 0.1,
+        return_attn_weights=False,
+        in_training=False,
     ):
         super(GPT, self).__init__()
 
         self.transformer = TransformerBlock(
-            num_head,
-            key_dim,
-            embeded_dim,
-            ff_dim,
-            dropout_rate,
+            num_head, key_dim, embeded_dim, ff_dim, dropout_rate, return_attn_weights
         )
 
         self.embedding = TokenAndPositionEmbedding(max_len, NUM_CLASSES, embeded_dim)
 
         self.head = nn.Linear(embeded_dim, NUM_CLASSES)
 
+        self.in_training = in_training
+
     def forward(self, x: Tensor) -> Tensor:
         x = self.embedding(x)
         x, attention_scores = self.transformer(x)
-        x = F.softmax(self.head(x), dim=-1)
+
+        # CrossEntropyLoss is used for training which already
+        # contains a softmax. Therefore it can be ommited during
+        # training
+        if self.in_training:
+            x = self.head(x)
+        else:
+            x = F.softmax(self.head(x), -1)
+
         return x, attention_scores

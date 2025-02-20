@@ -140,16 +140,8 @@ def causal_attention_mask(
     dtype: dtype,
     device: device,
 ):
-    i = torch.arange(n_dest).to(device)[:, None]
-    j = torch.arange(n_src).to(device)
-    m = i > j - n_src + n_dest
-    mask = m.to(dtype)
-    mask = torch.reshape(mask, [1, n_dest, n_src])
-    mult = torch.concat(
-        [
-            torch.unsqueeze(torch.tensor(batch_size * num_heads), -1),
-            torch.tensor([1, 1], dtype=torch.int32),
-        ],
-        0,
+    return (
+        torch.triu(torch.ones((batch_size * num_heads, n_dest, n_src)), diagonal=1)
+        .to(dtype)
+        .to(device)
     )
-    return torch.tile(mask, mult.numpy().tolist())

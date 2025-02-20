@@ -53,7 +53,7 @@ if __name__ == "__main__":
     model_path = "gpt.pt"
     tokenizer_path = "tokenizer_gpt.pt"
 
-    model = GPT()
+    model = GPT(in_training=True)
 
     if os.path.exists(model_path):
         print("Loaded model")
