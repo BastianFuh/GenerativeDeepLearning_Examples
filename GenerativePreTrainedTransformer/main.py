@@ -10,13 +10,6 @@ called dataset.
 
 [1] https://www.kaggle.com/datasets/hugodarwood/epirecipes
 
-
-
-This script trains a Long Short-Term Memory(LSTM) Network. This network is a subtype of recurrent neural
-networks(RNN). The unique aspect this model is that is does not only use a hidden state but also a cell state
-which is continously updates with new data from the input.
-
-
 """
 
 import torch
